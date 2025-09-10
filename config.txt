@@ -1,0 +1,13 @@
+ml_pipeline/
+├── __init__.py
+├── models/
+│   ├── __init__.py
+│   └── networks.py          # 1. 模型本体
+├── utils/
+│   ├── __init__.py
+│   ├── data_utils.py          # 2. 数据处理
+│   └── tensor_converter.py 
+│
+├── train.py           # 3. 训练器 (已有)
+├── predict.py         # 4. 模型预测器
+└── pipeline.py       # 5. 流水线
