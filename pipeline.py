@@ -1,70 +1,136 @@
 from .models import KNN 
 from .models import LinearMultiClassification
+from .utils.data_utils import encode_categorical_column, scale_features, encode_target_column
+from .utils.tensor_convert import TensorConverter
 from train import KNNTrainer
 from predict import KNNPredictor
 import torch
+import pandas as pd
+import numpy as np 
 from abc import ABC, abstractmethod 
+from train import ClassificationTrainer
 
-class MLPipeline: 
-  def __init__(self, model_type, device = 'cpu', enable_save=False, **kwargs): 
-    '''
-    Pipeline for the whole task from data processing to generate the answer
-    : Args : 
-      model_type: choose the model to complete the task
-      device: usually we use cpu or cuda(cuda can only be used for Learnable model)
-       or sth. like apple silicon which support the Pytorch framework
-      enable_save: save the model or not
-      **kwargs: 
-        usually relative to the model itself
-        - k: KNN to select the number of neighbors
-        - input_size, output_size: the 
-    '''
-    self.model_type = model_type 
-    self.device = device
-    self.enable_save = enable_save
+class BasePipeline(ABC):
+  def __init__(self, model, scaler_type = 'standard'):
+    self.model = model 
+    self.scaler_type = scaler_type
+    self.is_fitted = False 
+
+  @abstractmethod
+  def preprocess_features(self, X, is_training=True):
+    pass 
+
+  @abstractmethod 
+  def preprocess_target(self, y, is_training=True): 
+    pass 
+
+  @abstractmethod
+  def fit(self, X, y, **kwargs): 
+    pass 
+
+  @abstractmethod
+  def predict(self, X, y):
+    pass 
+
+class MLPipeline_NP(BasePipeline):
+  def __init__(self, model, scaler_type='StandardScaler'):
+    super.__init__(model, scaler_type)
+
+    self.scalers={}
+    self.encoders={}
+    self.target_encoder=None 
+    self.numeric_columns=[]
+    self.categorial_columns=[]
+
+  def preprocess_features(self, X, is_training=True):
+    X_processed = X.copy()
+
+    if isinstance(X_processed, pd.DataFrame): 
+      # identify the column type 
+      if is_training: 
+        self.numeric_columns = X_processed.select_dtypes(include=[np.number]).columns.tolist()
+        self.categorial_columns = X_processed.select_dtypes(include=['object']).columns.tolist()
+
+      # deal with classification label 
+      for col in self.categorial_columns:
+        if is_training:
+          X_processed[col], self.encoders[col] = encode_categorical_column(X_processed, col)
+        else: 
+          if col in self.encoders: 
+            X_processed[col] = self.encoders[col].transform(X_processed[col].astype(str))
+          else: 
+            raise ValueError(f"No encoder found for column {col}")
+
+      if self.numeric_columns: 
+        if is_training: 
+          X_processed, self.scalers['feature'] = scale_features(
+            X_processed, self.numeric_columns, self.scaler_type
+          )
+        else: 
+          X_processed, _ = scale_features(
+            X_processed, self.numeric_columns, 
+            self.scaler_type, fit_scaler=self.scalers['features']
+          )
+
+    X_numpy = TensorConverter.to_numpy(X_processed)
+    if X_numpy.ndim == 1: 
+      X_numpy = X_numpy.reshape(1, -1)
     
-    if model_type == 'knn': 
-      self.model = KNN(**kwargs)
-      self.trainer = KNNTrainer()
-      self.predictor = KNNPredictor()
-    elif model_type == 'linear':
-      input_size = kwargs.get('input_size', 'hidden_size')
-      output_size = kwargs.get('output_size', 3)
-      self.model = LinearMultiClassification(input_size, output_size).to(device)
-      # self.trainer = NeuralTrainer()
-      # self.predictor = NeuralPredictor()
-    
-    else: 
-      raise ValueError(f"Unsupported model type: {model_type}")
-    
-  def train(self, train_loader, val_loader = None, **kwargs): 
-    return self.trainer.train(self.model, train_loader, val_loader, **kwargs)
+    return X_numpy
   
-  def predict(self, test_loader):
-    return self.predictor.predict(self.model, test_loader)
-  
-  def save_model(self, path): 
-    '''save the model after training on your computer(optional)'''
-    print("IF YOU WANT TO SAVE THE MODEL, PLEASE BE ASSURE enable_save IS True!!!")
-    if not self.enable_save: 
-      print("Model saving is disabled. Set enable_save=True to enable this feature!")
-      return 
-    
-    if hasattr(self.model, 'save'): 
-      self.model.save('path')
+  def preprocess_target(self, y, is_training=True):
+    if is_training: 
+      y_processed, self.target_encoder = encode_target_column(y)
     else: 
-      torch.save(self.model.state_dict(), path)
-      
-    print('Model saved to {path}')
+      if self.target_encoder is not None: 
+        y_processed = self.target_encoder.transform(y)
+      else: 
+        y_processed = TensorConverter.to_numpy(y)
+
+    return y_processed
+  
+  def fit(self, X, y): 
+    X_processed = self.preprocess_features(X, is_training=True)
+    y_processed = self.preprocess_target(y, is_training=True)
+
+    self.model.fit(X_processed, y_processed)
+    self.is_fitted=True
+    return self 
+
+  def predict(self, X): 
+    if not self.is_fitted: 
+      raise ValueError("Pipeline must be fitted before making predictions")
     
-  def load_model(self, path): 
-    '''Load the model from your local space (optional)'''
-    if not self.enable_save:
-      print("Model loading is disabled. Set enable_save=True to enable this feature.")
-      return
-        
-    if hasattr(self.model, 'load'):
-      self.model.load(path)
-    else:
-      self.model.load_state_dict(torch.load(path, map_location=self.device))
-      print(f"Model loaded from {path}")
+    X_processed = self.preprocess_features(X, is_training=False)
+    predictions = self.model.predict(X_processed)
+
+    if self.target_encoder is not None: 
+      predictions = self.target_encoder.inverse_transform(predictions.astype(int))
+
+    return predictions
+  
+  def predict_proba(self, X): 
+    if not hasattr(self.model, 'predict_proba'): 
+      raise ValueError("Model doesn't ")
+    
+    X_processed = self.preprocess_features(X, is_training=False)
+    return self.model.predict_proba(X_processed)
+
+class MLPipeline_P(BasePipeline):
+  def __init__(self, model, scaler_type='standard', device='cuda'):
+    super().__init__(model, scaler_type)
+
+    self.device = device 
+    self.model = self.model.to(device)
+    self.trainer = None 
+
+  def fit(self, X, y, validation=None, **kwargs):
+    X_tensor = self.preprocess_features(X, is_training=True)
+    y_tensor = self.preprocess_target(y, is_training=True)
+
+    train_loader = self._create_dataloader(X_tensor, y_tensor, **kwargs)
+    val_loader = None 
+    if validation: 
+      val_loader = self._create_validation_data(validation)
+    
+    self.trainer = ClassificationTrainer
