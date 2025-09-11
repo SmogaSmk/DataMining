@@ -3,6 +3,7 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 import torch
 from abc import ABC, abstractmethod
+from ..utils.tensor_convert import TensorConverter
 
 '''
 ----------------------------------
@@ -33,6 +34,13 @@ class _KNNCore:
     return np.sqrt(np.sum((X_train - test_point) ** 2, axis = 1))
   
   def find_k_nearest(self, X_train, y_train, test_point):
+    '''
+    find the neighbors who are the k th closer than any others
+    :Args:
+      X_train: the train data and points
+      y_train: the train data's label
+      test_point: the point to find k th neighbors from all training data
+    '''
     distances = self.distance(X_train, test_point)
     k_near = min(self.k, len(distances))
     k_indices = np.argpartition(distances, k_near - 1)[:k_near]
@@ -80,36 +88,20 @@ class KNN(BaseModel):
     self.feature_names = None
     self.n_features = None 
     self.n_classes = None
-    
-  def _deTensorfy(self, data):
-    
-    if torch.is_tensor(data): 
-      data = data.detach().cpu().numpy()
-    else:
-      data = np.array(data)
-      
-    return data 
-    
+
   def fit(self, X, y):
     
-    if torch.is_tensor(X): 
-      self.X_train = X.detach().cpu().numpy()
-    else: 
-      self.X_train = np.array(X)
-      
-    if torch.is_tensor(y):
-      self.y_train = y.detach().cpu().numpy()
-    else: 
-      self.y_train = np.array(y)
-      
+    self.X_train = TensorConverter.to_numpy(X)
+    self.y_train = TensorConverter.to_numpy(y)
+    
     self.n_features = self.X_train.shape[1]
-    if self.task_type == 'classification':
+    if self.task == 'classification':
       self.n_classes = len(np.unique(self.y_train))
 
     self.is_fitted = True
     
     # print(f"KNN fitted: {self.X_train.shape[0]} samples, {self.n_features} features")
-    if self.task_type == 'classification': 
+    if self.task == 'classification': 
       print(f"Number of classes: {self.n_classes}")
       
     return self
@@ -118,16 +110,13 @@ class KNN(BaseModel):
     if not self.is_fitted:
       raise ValueError("Please fit the model first")
     
-    if torch.is_tensor(X):
-      X_np = X.detach().cpu().numpy()
-    else: 
-      X_np = np.array(X)
+    X_np = TensorConverter.to_numpy(X)
       
     if X_np.ndim == 1: 
       X_np = X_np.reshape(1, -1)
       return self._predict_single(X_np[0])
     else: 
-      return self._predict_batch(X_np[0])
+      return self._predict_batch(X_np)
     
   def _predict_single(self, test_point):
     k_neighbors = self.core.find_k_nearest(self.X_train, self.y_train, test_point)
@@ -144,13 +133,10 @@ class KNN(BaseModel):
     return np.array(predictions)
   
   def predict_probability(self, X):
-    if self.task_type != 'classification': 
+    if self.task != 'classification': 
       raise ValueError("Only available for classification task")
     
-    if torch.is_tensor(self, X): 
-      X_np = X.detach().cpu().numpy()
-    else : 
-      X_np = np.array(X)
+    X_np = TensorConverter.to_numpy(X)
     
     if X_np.ndim == 1: 
       X_np = X_np.reshape(1, -1)
@@ -178,8 +164,7 @@ class KNN(BaseModel):
       'X_train': self.X_train,
       'y_train': self.y_train,
       'k': self.core.k,
-      'task_type': self.task_type,
-      'distance_metric': self.core.distance_metric,
+      'task': self.task,
       'n_features': self.n_features,
       'n_classes': self.n_classes
     }
@@ -194,8 +179,7 @@ class KNN(BaseModel):
     self.X_train = data['X_train']
     self.y_train = data['y_train']
     self.core.k = int(data['k'])
-    self.task_type = str(data['task_type'])
-    self.core.distance_metric = str(data['distance_metric'])
+    self.task = str(data['task'])
     self.n_features = int(data['n_features'])
     self.n_classes = data['n_classes'].item() if data['n_classes'].ndim == 0 else None
     self.is_fitted = True
@@ -205,5 +189,61 @@ class KNN(BaseModel):
   
   def __repr__(self):
     status = "fitted" if self.is_fitted else "not fitted"
-    return f"KNN(k={self.core.k}, task='{self.task_type}', {status})"
-          
+    return f"KNN(k={self.core.k}, task='{self.task}', {status})"
+
+'''
+Usage Example:
+-------------
+
+# 1. Basic Classification Usage
+from your_module import KNN
+from your_module.evaluator import ModelEvaluator
+
+# Create and fit model
+knn_clf = KNN(k=5, task='classification', n_jobs=-1)
+knn_clf.fit(X_train, y_train)
+
+# Make predictions
+predictions = knn_clf.predict(X_test)
+probabilities = knn_clf.predict_probability(X_test)
+
+# Evaluate using your custom evaluator
+metrics = ModelEvaluator.evaluate_NL_model(knn_clf, test_loader, task_type='classification')
+print(f"Accuracy: {metrics['accuracy']}")
+
+# 2. Basic Regression Usage
+knn_reg = KNN(k=10, task='regression', n_jobs=-1)
+knn_reg.fit(X_train, y_train)
+
+predictions = knn_reg.predict(X_test)
+metrics = ModelEvaluator.evaluate_NL_model(knn_reg, test_loader, task_type='regression')
+print(f"MSE: {metrics['mse']}, R²: {metrics['r2']}")
+
+# 3. Model Persistence
+# Save model
+knn_clf.save('knn_model.npz')
+
+# Load model
+new_knn = KNN()
+new_knn.load('knn_model.npz')
+
+# 4. Integration with PyTorch DataLoader
+import torch
+from torch.utils.data import DataLoader, TensorDataset
+
+# Your data preparation
+dataset = TensorDataset(torch.tensor(X_test), torch.tensor(y_test))
+test_loader = DataLoader(dataset, batch_size=32, shuffle=False)
+
+# Evaluation with DataLoader (using your evaluator)
+results = ModelEvaluator.evaluate_NL_model(knn_clf, test_loader)
+
+Notes:
+------
+- KNN is a non-parametric algorithm, so fit() only stores training data
+- Prediction time complexity: O(n×d) where n=training samples, d=features
+- Use n_jobs=-1 for parallel processing on multi-core systems
+- For large datasets, consider reducing k or using approximate nearest neighbor methods
+- The model automatically detects task type if model.task attribute exists
+- Supports both numpy arrays and PyTorch tensors via TensorConverter
+'''

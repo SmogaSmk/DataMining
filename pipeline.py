@@ -26,7 +26,7 @@ class MLPipeline:
       self.model = KNN(**kwargs)
       self.trainer = KNNTrainer()
       self.predictor = KNNPredictor()
-    elif model_type == 'linear'
+    elif model_type == 'linear':
       input_size = kwargs.get('input_size', 'hidden_size')
       output_size = kwargs.get('output_size', 3)
       self.model = LinearMultiClassification(input_size, output_size).to(device)
