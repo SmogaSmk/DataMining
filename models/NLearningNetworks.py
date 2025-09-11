@@ -68,11 +68,8 @@ class _KNNCore:
     count_dict = {}
     
     for label in labels: 
-      if isinstance(label, np.ndarray): 
-        label_key = tuple(label) if label.ndim > 0 else label.item()
-      else : 
-        label_key = label
-      count_dict[label_key] = count_dict.get(label_key, 0) + 1
+      count_dict[label] = count_dict.get(label, 0) + 1
+
     return max(count_dict, key = count_dict.get)
 
 class KNN(BaseModel): 
@@ -85,14 +82,27 @@ class KNN(BaseModel):
     self.y_train = None
     self.is_fitted = False
     
-    self.feature_names = None
     self.n_features = None 
     self.n_classes = None
+    
+  def _validate_input(self, X, y = None): 
+    if not isinstance(X, np.ndarray): 
+      raise TypeError("X must be numpy array")
+    
+    if X.ndim != 2: 
+      raise ValueError("X must be 2D array ")
+    
+    if y is not None: 
+      if y is not isinstance(y, np.ndarray): 
+        raise TypeError("y must be numpy array")
+      if len(X) != len(y): 
+        raise ValueError("X and y must share same number of samples")
 
   def fit(self, X, y):
     
-    self.X_train = TensorConverter.to_numpy(X)
-    self.y_train = TensorConverter.to_numpy(y)
+    self._validate_input(X, y)
+    self.X_train = X.copy()
+    self.y_train = y.copy()
     
     self.n_features = self.X_train.shape[1]
     if self.task == 'classification':
@@ -110,22 +120,26 @@ class KNN(BaseModel):
     if not self.is_fitted:
       raise ValueError("Please fit the model first")
     
-    X_np = TensorConverter.to_numpy(X)
+    self._validate_input(X)
       
-    if X_np.ndim == 1: 
-      X_np = X_np.reshape(1, -1)
-      return self._predict_single(X_np[0])
-    else: 
-      return self._predict_batch(X_np)
+    if X.shape[1] != self.n_features:
+      raise ValueError(f"Expected {self.n_features} features, got {X.shape[1]}")
     
+    return self._predict_batch(X)   
+   
   def _predict_single(self, test_point):
     k_neighbors = self.core.find_k_nearest(self.X_train, self.y_train, test_point)
+    
     if self.task == 'classification': 
       return self.core.aggregate_classify(k_neighbors)
     else: 
       return self.core.aggregate_reg(k_neighbors)
     
   def _predict_batch(self, X_test): 
+    
+    if self.n_jobs == 1: 
+      predictions = [self._predict_single(test_point) for test_point in X_test]
+    
     predictions = Parallel(n_jobs = self.n_jobs) (
       delayed(self._predict_single)(test_point) for test_point in X_test
     )
@@ -136,20 +150,18 @@ class KNN(BaseModel):
     if self.task != 'classification': 
       raise ValueError("Only available for classification task")
     
-    X_np = TensorConverter.to_numpy(X)
-    
-    if X_np.ndim == 1: 
-      X_np = X_np.reshape(1, -1)
+    if not self.is_fitted:
+      raise ValueError("Model must be fitted before prediction")
       
+    self._validate_input(X)
+    
     probabilities = [] 
-    for test_point in X_np: 
+    for test_point in X: 
       neighbors = self.core.find_k_nearest(self.X_train, self.y_train, test_point)
       labels = [label for _, label in neighbors]
       
-      class_probs = np.zeros(self.n_classes)
-      for label in labels: 
-        class_probs[int(label)] += 1 
-      class_probs /= len(labels)
+      class_counts = np.bincount(labels, minlength=self.n_classes)
+      class_probs = class_counts / len(labels)
       probabilities.append(class_probs)
       
     return np.array(probabilities)

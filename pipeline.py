@@ -3,6 +3,7 @@ from .models import LinearMultiClassification
 from train import KNNTrainer
 from predict import KNNPredictor
 import torch
+from abc import ABC, abstractmethod 
 
 class MLPipeline: 
   def __init__(self, model_type, device = 'cpu', enable_save=False, **kwargs): 
