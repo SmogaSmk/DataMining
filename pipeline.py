@@ -1,6 +1,5 @@
-from .models import KNN 
-from .models import LinearMultiClassification
-from .utils import data_utils
+
+from .utils.data_utils import DataPreprocessor  
 from .utils.tensor_convert import TensorConverter, TensorDataProcessor
 from .predict import ModelPredictor
 from .train import ClassificationTrainer
@@ -12,7 +11,7 @@ from abc import ABC, abstractmethod
 from torch.utils.data import TensorDataset, DataLoader
 
 class BasePipeline(ABC):
-  def __init__(self, model, scaler_type = 'standard'):
+  def __init__(self, model, scaler_type='standard'):
     self.model = model 
     self.scaler_type = scaler_type
     self.is_fitted = False 
@@ -36,11 +35,11 @@ class BasePipeline(ABC):
 class MLPipeline_NP(BasePipeline):
   def __init__(self, model, scaler_type='standard'):
     super().__init__(model, scaler_type)
-    # 重置预处理状态
-    data_utils.reset_preprocessing_state()
+    # 创建数据预处理器实例
+    self.preprocessor = DataPreprocessor(scaler_type=scaler_type)
 
   def preprocess_features(self, X, is_training=True):
-    X_processed = data_utils.preprocess_features(X, fit=is_training, scaler_type=self.scaler_type)
+    X_processed = self.preprocessor.preprocess_features(X, fit=is_training)
     
     # 转换为numpy数组
     X_numpy = TensorConverter.to_numpy(X_processed)
@@ -51,9 +50,9 @@ class MLPipeline_NP(BasePipeline):
   
   def preprocess_target(self, y, is_training=True):
     if is_training:
-      y_processed = data_utils.encode_labels(y)
+      y_processed = self.preprocessor.encode_labels(y)
     else:
-      y_processed = data_utils.encode_labels(y)
+      y_processed = self.preprocessor.encode_labels(y)
     
     return TensorConverter.to_numpy(y_processed)
   
@@ -72,8 +71,8 @@ class MLPipeline_NP(BasePipeline):
     X_processed = self.preprocess_features(X, is_training=False)
     predictions = self.model.predict(X_processed)
 
-    # 使用函数进行反转换
-    return data_utils.decode_labels(predictions)
+    # 使用预处理器进行反转换
+    return self.preprocessor.decode_labels(predictions)
   
   def predict_proba(self, X): 
     if not hasattr(self.model, 'predict_proba'): 
@@ -91,8 +90,8 @@ class MLPipeline_P(BasePipeline):
     self.model = self.model.to(device)
     self.trainer = None 
     
-    # 重置预处理状态
-    data_utils.reset_preprocessing_state()
+    # 创建数据预处理器实例
+    self.preprocessor = DataPreprocessor(scaler_type=scaler_type)
     self.tensor_processor = TensorDataProcessor(device)
     
     self.optimizer = None
@@ -101,9 +100,8 @@ class MLPipeline_P(BasePipeline):
     
   def preprocess_features(self, X, is_training=True, categorical_columns=None):
     """预处理特征数据"""
-    X_processed = data_utils.preprocess_features(
-        X, fit=is_training, scaler_type=self.scaler_type, 
-        categorical_columns=categorical_columns
+    X_processed = self.preprocessor.preprocess_features(
+      X, fit=is_training, categorical_columns=categorical_columns
     )
       
     # 转换为张量
@@ -112,9 +110,9 @@ class MLPipeline_P(BasePipeline):
   def preprocess_target(self, y, is_training=True):
     """预处理目标变量"""
     if is_training:
-      y_encoded = data_utils.encode_labels(y)
+      y_encoded = self.preprocessor.encode_labels(y)
     else:
-      y_encoded = data_utils.encode_labels(y)
+      y_encoded = self.preprocessor.encode_labels(y)
     
     # 转换为张量
     return self.tensor_processor.prepare_targets(y_encoded, self.device)
@@ -127,9 +125,9 @@ class MLPipeline_P(BasePipeline):
     
     # 确保输入数据是 float32 类型
     if isinstance(X, pd.DataFrame):
-        X = X.astype({col: np.float32 for col in X.select_dtypes(include=[np.number]).columns})
+      X = X.astype({col: np.float32 for col in X.select_dtypes(include=[np.number]).columns})
     else:
-        X = np.array(X, dtype=np.float32)
+      X = np.array(X, dtype=np.float32)
     
     # 预处理数据
     X_tensor = self.preprocess_features(X, is_training=True, categorical_columns=categorical_columns)
@@ -145,9 +143,9 @@ class MLPipeline_P(BasePipeline):
       X_val, y_val = validation
       # 确保验证数据也是 float32 类型
       if isinstance(X_val, pd.DataFrame):
-          X_val = X_val.astype({col: np.float32 for col in X_val.select_dtypes(include=[np.number]).columns})
+        X_val = X_val.astype({col: np.float32 for col in X_val.select_dtypes(include=[np.number]).columns})
       else:
-          X_val = np.array(X_val, dtype=np.float32)
+        X_val = np.array(X_val, dtype=np.float32)
           
       X_val_tensor = self.preprocess_features(X_val, is_training=False, categorical_columns=categorical_columns)
       y_val_tensor = self.preprocess_target(y_val, is_training=False)
@@ -180,17 +178,17 @@ class MLPipeline_P(BasePipeline):
     encoded_predictions = self.predictor.predict_batch(X_processed)
     
     if return_original_labels:
-      return data_utils.decode_labels(encoded_predictions)
+      return self.preprocessor.decode_labels(encoded_predictions)
     else:
       return encoded_predictions
     
   def get_class_labels(self): 
     """获取类别标签"""
-    return data_utils.get_class_labels()
+    return self.preprocessor.get_class_labels()
   
   def get_label_mapping(self): 
     """获取标签映射"""
-    return data_utils.get_preprocessing_info()['label_mapping']
+    return self.preprocessor.label_mapping
   
   def predict_proba(self, X, categorical_columns=None): 
     if not self.is_fitted: 
@@ -206,7 +204,7 @@ class MLPipeline_P(BasePipeline):
     torch.save(self.model.state_dict(), model_path)
     
     # 保存预处理信息
-    preprocessing_info = data_utils.get_preprocessing_info()
+    preprocessing_info = self.preprocessor.save_state()
     
     preprocessing_path = model_path.replace('.pth', '_preprocessing.pkl')
     import pickle
@@ -227,12 +225,12 @@ class MLPipeline_P(BasePipeline):
       with open(preprocessing_path, 'rb') as f:
         preprocessing_info = pickle.load(f)
         
-      # 加载到数据预处理器
-      data_utils.load_preprocessing_info(preprocessing_info)
+      # 加载到预处理器
+      self.preprocessor.load_state(preprocessing_info)
       
       print(f"Model loaded from: {model_path}")
       print(f"Preprocessing info loaded from: {preprocessing_path}")
-      print(f"Available classes: {data_utils.get_class_labels()}")
+      print(f"Available classes: {self.preprocessor.get_class_labels()}")
             
     except FileNotFoundError:
       print(f"Warning: Preprocessing file {preprocessing_path} not found. "
