@@ -15,15 +15,15 @@ def extract_datetime_features(data, column, features_to_extract=['hour']):
     
   for feature in features_to_extract:
     if feature == 'hour':
-      result_data[f'{column}_hour'] = datetime_col.dt.hour
+      result_data[f'{column}'] = datetime_col.dt.hour
     elif feature == 'day':
-      result_data[f'{column}_day'] = datetime_col.dt.day
+      result_data[f'{column}'] = datetime_col.dt.day
     elif feature == 'month':
-      result_data[f'{column}_month'] = datetime_col.dt.month
+      result_data[f'{column}'] = datetime_col.dt.month
     elif feature == 'year':
-      result_data[f'{column}_year'] = datetime_col.dt.year
+      result_data[f'{column}'] = datetime_col.dt.year
     elif feature == 'dayofweek':
-      result_data[f'{column}_dayofweek'] = datetime_col.dt.dayofweek
+      result_data[f'{column}'] = datetime_col.dt.dayofweek
     
   return result_data
 

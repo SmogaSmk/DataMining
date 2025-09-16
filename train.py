@@ -13,6 +13,28 @@ class ClassificationTrainer:
     self.patience = 10
     self.patience_counter = 0
     
+  def evaluate(self, val_loader): 
+    if val_loader is None: 
+      return 0.0 
+    
+    self.model.eval()
+    correct = 0
+    total = 0
+    with torch.no_grad():
+      for data, target in val_loader: 
+        data, target = data.to(self.device), target.to(self.device)
+        
+        if target.dtype != torch.long: 
+          target = target.long()
+          
+        output = self.model(data)
+        _, predicted = torch.max(output.data, 1)
+        total += target.size(0)
+        correct += (predicted == target).sum().item()
+        
+    accuracy = 100 * correct / total 
+    return accuracy
+    
   def train(self, train_loader, val_loader=None, epochs = 100):
     train_losses = [] 
     val_accuracies = []
@@ -45,7 +67,51 @@ class ClassificationTrainer:
     self.model.train() 
     total_loss = 0
     
-    for data, target in train_loader: 
+    for batch_idx, (data, target) in enumerate(train_loader): 
+      try: 
+        data, target = data.to(self.device), target.to(self.device)
+    
+        if target.dtype != torch.long:
+          target = target.long()
+        if batch_idx == 0: 
+          print(f"Data shape: {data.shape}, Target shape: {target.shape}")
+          print(f"Target dtype: {target.dtype}")
+          print(f"Target range: [{target.min().item()}, {target.max().item()}]")
+        
+        self.optimizer.zero_grad()
+        output = self.model(data)
+        
+        if batch_idx == 0: 
+          print(f"Model output shape: {output.shape}")
+          num_classes = output.shape[1] if len(output.shape) > 1 else output.shape[0]
+          if target.max() >= num_classes:
+            raise ValueError(f"Target label {target.max()} >= num_classes {num_classes}")
+          if target.min() < 0: 
+            raise ValueError(f"Target label {target.min()} < 0")
+          
+        if torch.isnan(output).any() : 
+          print(f"Nan detected in output at batch {batch_idx}")
+          continue
+        if torch.isinf(output).any(): 
+          print(f"Inf found in output at batch {batch_idx}")
+          continue
+        loss = self.criterion(output, target)
+        
+        loss.backward()
+
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm = 1.0)
+        
+        self.optimizer.step() 
+        total_loss += loss.item() 
+        
+      except RuntimeError as e: 
+        print(f"Error at batch {batch_idx}: {e}")
+        print(f"Data shape: {data.shape if 'data' in locals() else 'N/A'}")
+        print(f"Target shape: {target.shape if 'target' in locals() else 'N/A'}")
+        print(f"Target values: {target if 'target' in locals() else 'N/A'}")
+        raise e 
+    
+    '''for data, target in train_loader: 
       data, target = data.to(self.device), target.to(self.device)
       
       self.optimizer.zero_grad() 
@@ -54,6 +120,6 @@ class ClassificationTrainer:
       loss.backward() 
       self.optimizer.step()
       
-      total_loss += loss.item()
+      total_loss += loss.item()'''
       
     return total_loss / len(train_loader)

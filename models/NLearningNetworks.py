@@ -73,7 +73,7 @@ class _KNNCore:
     return max(count_dict, key = count_dict.get)
 
 class KNN(BaseModel): 
-  def __init__(self, k = 100, task = 'classification', n_jobs = -1):
+  def __init__(self, k = 10, task = 'classification', n_jobs = -1):
     self.core = _KNNCore(k)
     self.task = task
     self.n_jobs = n_jobs
@@ -93,7 +93,7 @@ class KNN(BaseModel):
       raise ValueError("X must be 2D array ")
     
     if y is not None: 
-      if y is not isinstance(y, np.ndarray): 
+      if not isinstance(y, np.ndarray): 
         raise TypeError("y must be numpy array")
       if len(X) != len(y): 
         raise ValueError("X and y must share same number of samples")
@@ -202,60 +202,3 @@ class KNN(BaseModel):
   def __repr__(self):
     status = "fitted" if self.is_fitted else "not fitted"
     return f"KNN(k={self.core.k}, task='{self.task}', {status})"
-
-'''
-Usage Example:
--------------
-
-# 1. Basic Classification Usage
-from your_module import KNN
-from your_module.evaluator import ModelEvaluator
-
-# Create and fit model
-knn_clf = KNN(k=5, task='classification', n_jobs=-1)
-knn_clf.fit(X_train, y_train)
-
-# Make predictions
-predictions = knn_clf.predict(X_test)
-probabilities = knn_clf.predict_probability(X_test)
-
-# Evaluate using your custom evaluator
-metrics = ModelEvaluator.evaluate_NL_model(knn_clf, test_loader, task_type='classification')
-print(f"Accuracy: {metrics['accuracy']}")
-
-# 2. Basic Regression Usage
-knn_reg = KNN(k=10, task='regression', n_jobs=-1)
-knn_reg.fit(X_train, y_train)
-
-predictions = knn_reg.predict(X_test)
-metrics = ModelEvaluator.evaluate_NL_model(knn_reg, test_loader, task_type='regression')
-print(f"MSE: {metrics['mse']}, R²: {metrics['r2']}")
-
-# 3. Model Persistence
-# Save model
-knn_clf.save('knn_model.npz')
-
-# Load model
-new_knn = KNN()
-new_knn.load('knn_model.npz')
-
-# 4. Integration with PyTorch DataLoader
-import torch
-from torch.utils.data import DataLoader, TensorDataset
-
-# Your data preparation
-dataset = TensorDataset(torch.tensor(X_test), torch.tensor(y_test))
-test_loader = DataLoader(dataset, batch_size=32, shuffle=False)
-
-# Evaluation with DataLoader (using your evaluator)
-results = ModelEvaluator.evaluate_NL_model(knn_clf, test_loader)
-
-Notes:
-------
-- KNN is a non-parametric algorithm, so fit() only stores training data
-- Prediction time complexity: O(n×d) where n=training samples, d=features
-- Use n_jobs=-1 for parallel processing on multi-core systems
-- For large datasets, consider reducing k or using approximate nearest neighbor methods
-- The model automatically detects task type if model.task attribute exists
-- Supports both numpy arrays and PyTorch tensors via TensorConverter
-'''

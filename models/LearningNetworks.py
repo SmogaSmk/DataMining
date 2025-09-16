@@ -32,18 +32,4 @@ class LinearMultiClassification(nn.Module):
             f"hidden_size2 = {self.hidden_size2}, "
             f"output_size = {self.output_size} )"
             )
-  # =========== usage ============
-  '''
-  1. Training: 
-  trainer = ClassificationTrainer(model, device = 'cuda')
-  train_losses, val_accuracies = trainer.train(train_loader, val_loader, epochs = 50)
   
-  2. Model Evaluation
-  # evaluate on validation sets
-  val_acc = ModelEvaluator.evaluate_classification_model(trainer.model, val_loader, trainer.device)
-
-  # Final test
-  trainer.model.load_state_dict(torch.load('best_model.pth'))
-  test_acc = ModelEvaluator.evaluate_classification_model(trainer.model, test_loader, trainer.device)
-  print(f'Final Test Accuracy: {test_acc:.2f}%')
-  '''
