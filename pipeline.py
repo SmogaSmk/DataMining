@@ -196,6 +196,12 @@ class MLPipeline_P(BasePipeline):
 
     result_data = X.copy() 
     
+    # 自动检测分类列（如果没有手动指定）
+    if categorical_columns is None:
+      categorical_columns = result_data.select_dtypes(include=['object']).columns.tolist()
+      if is_training and categorical_columns:
+        print(f"自动检测到分类列: {categorical_columns}")
+    
     if categorical_columns: 
       for col in categorical_columns: 
         if col in result_data.columns: 
@@ -208,6 +214,9 @@ class MLPipeline_P(BasePipeline):
               encoder = self.categorical_encoders[col]
               encoded_values = encoder.transform(result_data[col].astype(str))
               result_data[col] = encoded_values 
+            else:
+              # 如果测试数据中有新的分类列，发出警告
+              print(f"警告: 列 '{col}' 在训练时未见过，将跳过编码")
     
     numeric_columns = result_data.select_dtypes(include=[np.number]).columns.tolist()
     
@@ -224,7 +233,13 @@ class MLPipeline_P(BasePipeline):
             fit_scaler=self.feature_scaler
           )
           
-    return self.converter.to_tensor(result_data.values, self.device)
+    # 确保数据类型为 float32
+    if isinstance(result_data, pd.DataFrame):
+        result_data = result_data.astype(np.float32)
+    else:
+        result_data = np.array(result_data, dtype=np.float32)
+        
+    return self.converter.to_tensor(result_data.values if hasattr(result_data, 'values') else result_data, self.device)
 
   def preprocess_target(self, y, is_training=True):
     '''Process target variable for PyTorch training'''
@@ -251,6 +266,14 @@ class MLPipeline_P(BasePipeline):
     print(f"Pipeline device: {self.device}")
     print(f"Model device: {next(self.model.parameters()).device}")
     
+    # 确保输入数据是 float32 类型
+    if isinstance(X, pd.DataFrame):
+        X = X.astype({col: np.float32 for col in X.select_dtypes(include=[np.number]).columns})
+    else:
+        X = np.array(X, dtype=np.float32)
+    
+    # 目标变量保持原始类型用于标签编码
+    
     X_tensor = self.preprocess_features(X, is_training=True, 
                                         categorical_columns=categorical_columns)
     y_tensor = self.preprocess_target(y, is_training=True)
@@ -263,6 +286,12 @@ class MLPipeline_P(BasePipeline):
     val_loader = None 
     if validation is not None : 
       X_val, y_val = validation
+      # 确保验证数据也是 float32 类型
+      if isinstance(X_val, pd.DataFrame):
+          X_val = X_val.astype({col: np.float32 for col in X_val.select_dtypes(include=[np.number]).columns})
+      else:
+          X_val = np.array(X_val, dtype=np.float32)
+          
       X_val_tensor = self.preprocess_features(X_val, is_training=False, 
                                               categorical_columns=categorical_columns)
       y_val_tensor = self.preprocess_target(y_val, is_training=False)

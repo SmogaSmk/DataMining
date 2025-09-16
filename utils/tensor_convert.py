@@ -22,7 +22,9 @@ class TensorConverter:
     if torch.is_tensor(data): 
       return data.to(device)
     else: 
-      return torch.from_numpy(np.array(data)).to(device)
+      # 确保数据类型为 float32
+      np_data = np.array(data, dtype=np.float32)
+      return torch.from_numpy(np_data).to(device)
     
   @ staticmethod 
   def ensure_2d(data): 
