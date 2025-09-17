@@ -24,7 +24,6 @@ class DataPreprocessor:
     self.categorical_columns = []
   
   def create_label_mapping(self, labels):
-    """创建标签映射"""
     if isinstance(labels, pd.Series):
       unique_labels = labels.unique()
     else:
@@ -34,14 +33,13 @@ class DataPreprocessor:
     self.label_mapping = {label: idx for idx, label in enumerate(unique_labels)}
     self.reverse_label_mapping = {idx: label for label, idx in self.label_mapping.items()}
     
-    print(f"创建了 {len(unique_labels)} 个类别的标签映射:")
+    # print(f"创建了 {len(unique_labels)} 个类别的标签映射:")
     for original, encoded in self.label_mapping.items():
       print(f"  {original} -> {encoded}")
         
     return self.label_mapping
   
   def encode_labels(self, labels):
-    """编码标签"""
     if not self.label_mapping:
       self.create_label_mapping(labels)
         
@@ -90,8 +88,8 @@ class DataPreprocessor:
       self.categorical_columns = categorical_columns
       self.numeric_columns = result_data.select_dtypes(include=[np.number]).columns.tolist()
       
-      print(f"检测到 {len(self.numeric_columns)} 个数值列: {self.numeric_columns}")
-      print(f"检测到 {len(self.categorical_columns)} 个分类列: {self.categorical_columns}")
+      # print(f"检测到 {len(self.numeric_columns)} 个数值列: {self.numeric_columns}")
+      # print(f"检测到 {len(self.categorical_columns)} 个分类列: {self.categorical_columns}")
       
       # 处理分类变量
       self.categorical_encoders = {}
@@ -100,7 +98,7 @@ class DataPreprocessor:
           encoder = LabelEncoder()
           result_data[col] = encoder.fit_transform(result_data[col].astype(str))
           self.categorical_encoders[col] = encoder
-          print(f"编码分类列: {col}")
+          # print(f"编码分类列: {col}")
       
       # 处理数值变量缩放
       if self.numeric_columns:
@@ -114,7 +112,7 @@ class DataPreprocessor:
           raise ValueError("只支持 'standard', 'minmax', 'robust' 缩放器")
         
         result_data[self.numeric_columns] = self.scaler.fit_transform(result_data[self.numeric_columns])
-        print(f"缩放数值列: {self.numeric_columns}")
+        # print(f"缩放数值列: {self.numeric_columns}")
     
     else:
       # 使用已拟合的处理器
@@ -131,17 +129,14 @@ class DataPreprocessor:
     return result_data.astype(np.float32).values
   
   def get_num_classes(self):
-    """获取类别数量"""
     return len(self.label_mapping)
   
   def get_class_labels(self):
-    """获取原始类别标签列表"""
     if not self.label_mapping:
       raise ValueError("标签映射未创建")
     return sorted(self.label_mapping.keys())
   
   def save_state(self):
-    """保存预处理状态"""
     return {
       'label_mapping': self.label_mapping.copy(),
       'reverse_label_mapping': self.reverse_label_mapping.copy(),
@@ -153,7 +148,6 @@ class DataPreprocessor:
     }
   
   def load_state(self, state):
-    """加载预处理状态"""
     self.label_mapping = state.get('label_mapping', {})
     self.reverse_label_mapping = state.get('reverse_label_mapping', {})
     self.scaler = state.get('scaler', None)
@@ -166,20 +160,7 @@ class DataPreprocessor:
 # 保持简单的函数式接口用于快速使用
 def prepare_data(data, target_column, feature_columns=None, test_size=0.2, 
                  random_state=42, scaler_type='standard'):
-  """
-  快速数据准备函数 - 适合简单场景的一站式处理
-  
-  Args:
-    data: 原始数据DataFrame
-    target_column: 目标列名
-    feature_columns: 特征列名列表，None则自动使用所有其他列
-    test_size: 测试集比例
-    random_state: 随机种子
-    scaler_type: 缩放器类型
-    
-  Returns:
-    tuple: (X_train, X_test, y_train, y_test, preprocessor)
-  """
+
   if feature_columns is None:
     feature_columns = [col for col in data.columns if col != target_column]
     
@@ -201,19 +182,13 @@ def prepare_data(data, target_column, feature_columns=None, test_size=0.2,
   # 编码标签
   y_train_encoded = preprocessor.encode_labels(y_train)
   y_test_encoded = preprocessor.encode_labels(y_test)
-  
-  print("✅ 数据预处理完成！")
+
   return X_train_processed, X_test_processed, y_train_encoded, y_test_encoded, preprocessor
 
 
 def auto_preprocess_data(X_train, X_test=None, y_train=None, y_test=None, 
                          scaler_type='standard', handle_missing=True):
-  """
-  自动预处理数据函数 - 兼容原有接口
-  
-  Returns:
-    dict: 包含处理后数据和预处理器的字典
-  """
+
   preprocessor = DataPreprocessor(scaler_type=scaler_type)
   
   # 预处理特征
@@ -238,14 +213,11 @@ def auto_preprocess_data(X_train, X_test=None, y_train=None, y_test=None,
     'preprocessor': preprocessor,  # 返回预处理器实例而不是状态字典
     'preprocessing_info': preprocessor.save_state()  # 保持向后兼容
   }
-    
-  print("✅ 数据预处理完成！")
   return result
 
 
 # 实用工具函数保持函数式
 def extract_datetime_features(data, column, features_to_extract=['hour']):
-  """从单个时间列提取时间特征"""
   result_data = data.copy()
   datetime_col = pd.to_datetime(data[column])
     

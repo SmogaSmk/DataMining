@@ -1,7 +1,26 @@
+
 [project]
 name = "ml-pipeline"
 version = "0.1.0"
-description = "Add your description here"
+description = "Machine Learning Pipeline"
 readme = "README.md"
-requires-python = ">=3.12"
-dependencies = []
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+authors = [
+	{ name = "SmogaSmk", email = "" }
+]
+dependencies = [
+	"joblib==1.4.2",
+	"numpy==2.3.3",
+	"pandas==2.3.2",
+	"scikit-learn==1.7.2",
+	"torch==2.5.1+cu121",
+	"tqdm==4.67.1"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/SmogaSmk/DataMining"
+"Repository" = "https://github.com/SmogaSmk/DataMining"
+
+[tool.setuptools]
+packages = ["ML_pipeline", "ML_pipeline.models", "ML_pipeline.utils"]

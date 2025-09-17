@@ -1,9 +1,9 @@
-from .LearningNetworks import LinearMultiClassification, RidgeRegression
+from .LearningNetworks import LinearMultiClassificationH, RidgeRegression
 from .NLearningNetworks import KNN, BaseModel
 
 __all__ = [
   # Neural Networks
-  'LinearMultiClassification',
+  'LinearMultiClassificationH',
   'RidgeRegression',
   # Conventional Networks
   'KNN', 

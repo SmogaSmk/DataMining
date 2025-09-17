@@ -7,7 +7,22 @@ class ClassificationTrainer:
   def __init__(self, model, criterion=None, optimizer=None, device = 'cpu'): 
     self.model = model.to(device) 
     self.device = device
-    self.criterion = criterion or nn.CrossEntropyLoss()
+    
+    # 自动检测并应用模型的类别权重
+    if criterion is None:
+      class_weights = None
+      if hasattr(model, 'get_class_weights'):
+        class_weights = model.get_class_weights(device=device)
+        if class_weights is not None:
+          print(f"检测到类别权重: {class_weights}")
+          print("应用加权交叉熵损失函数以处理不平衡数据")
+        else:
+          print("未检测到类别不平衡，使用标准交叉熵损失函数")
+      
+      self.criterion = nn.CrossEntropyLoss(weight=class_weights)
+    else:
+      self.criterion = criterion
+      
     self.optimizer = optimizer or optim.Adam(model.parameters(), lr = 0.001)
     self.best_val_acc = 0
     self.patience = 10
