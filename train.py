@@ -53,7 +53,7 @@ class ClassificationTrainer:
         self.best_val_acc = val_acc 
         self.patience_counter = 0
         
-        torch.save(self.model.state_dict(), 'best_model.pth')
+        best_model_state = {k: v.clone() for k, v in self.model.state_dict().items()}
       else: 
         self.patience_counter += 1
 
@@ -61,6 +61,9 @@ class ClassificationTrainer:
         print(f'Early stopping at epoch {epoch+1}')
         break
       
+    if best_model_state is not None: 
+      self.model.load_state_dict(best_model_state)
+      print("Load best model weights (validation accuracy: {self.best_val_acc:.4f})")
     return train_losses, val_accuracies
   
   def _train_epoch(self, train_loader):
@@ -89,12 +92,12 @@ class ClassificationTrainer:
             # 重新创建优化器，因为模型参数可能已经改变
             self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
             model_initialized = True
-            print(f"Model auto-initialized with input_size={self.model.input_size}, output_size={self.model.output_size}")
+            # print(f"Model auto-initialized with input_size={self.model.input_size}, output_size={self.model.output_size}")
         else:
           output = self.model(data)
         
         if batch_idx == 0: 
-          print(f"Model output shape: {output.shape}")
+          # print(f"Model output shape: {output.shape}")
           num_classes = output.shape[1] if len(output.shape) > 1 else output.shape[0]
           if target.max() >= num_classes:
             raise ValueError(f"Target label {target.max()} >= num_classes {num_classes}")
@@ -109,6 +112,11 @@ class ClassificationTrainer:
           continue
         loss = self.criterion(output, target)
         
+        # 如果模型有L2正则化方法（如Ridge回归），添加正则化项
+        if hasattr(self.model, 'get_l2_penalty'):
+          l2_penalty = self.model.get_l2_penalty()
+          loss = loss + l2_penalty
+
         loss.backward()
 
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm = 1.0)

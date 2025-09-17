@@ -1,5 +1,5 @@
 from .models import KNN 
-from .models import LinearMultiClassification
+from .models import LinearMultiClassification, RidgeRegression
 from .utils.data_utils import DataPreprocessor  # 改为使用新的类
 from .utils.tensor_convert import TensorConverter, TensorDataProcessor
 from .predict import ModelPredictor
@@ -122,7 +122,7 @@ class MLPipeline_P(BasePipeline):
           categorical_columns=None, validation=None, **kwargs):
     """训练模型"""
     print(f"Pipeline device: {self.device}")
-    print(f"Model device: {next(self.model.parameters()).device}")
+    # print(f"Model device: {next(self.model.parameters()).device}")
     
     # 确保输入数据是 float32 类型
     if isinstance(X, pd.DataFrame):
