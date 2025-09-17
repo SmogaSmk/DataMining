@@ -66,6 +66,7 @@ class ClassificationTrainer:
   def _train_epoch(self, train_loader):
     self.model.train() 
     total_loss = 0
+    model_initialized = False
     
     for batch_idx, (data, target) in enumerate(train_loader): 
       try: 
@@ -79,7 +80,18 @@ class ClassificationTrainer:
           print(f"Target range: [{target.min().item()}, {target.max().item()}]")
         
         self.optimizer.zero_grad()
-        output = self.model(data)
+        
+        # 支持自动初始化的模型
+        if hasattr(self.model, '_is_initialized') and not self.model._is_initialized:
+          num_classes = int(target.max().item()) + 1
+          output = self.model(data, num_classes=num_classes)
+          if not model_initialized:
+            # 重新创建优化器，因为模型参数可能已经改变
+            self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
+            model_initialized = True
+            print(f"Model auto-initialized with input_size={self.model.input_size}, output_size={self.model.output_size}")
+        else:
+          output = self.model(data)
         
         if batch_idx == 0: 
           print(f"Model output shape: {output.shape}")
